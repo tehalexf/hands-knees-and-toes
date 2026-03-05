@@ -509,13 +509,41 @@
             const colors = ["#3498db", "#e67e22", "#ffff00", "#ff0000"]; // Blue (L), Orange (R), Yellow, Red
             const labels = ["MY LEFT", "MY RIGHT", "MAYBE", "OTHER"];
 
+            // 1. Initial Load: Check if a frame is specified in the URL
+            function initFromURL() {
+                const params = new URLSearchParams(window.location.search);
+                const frameParam = params.get("frame");
+
+                if (frameParam) {
+                    const foundIndex = frames.indexOf(frameParam);
+                    if (foundIndex !== -1) {
+                        currentIndex = foundIndex;
+                    }
+                }
+            }
+
+            // 2. Update URL: Change the browser address bar without reloading
+            function updateURL(frameName) {
+                const newUrl =
+                    window.location.protocol +
+                    "//" +
+                    window.location.host +
+                    window.location.pathname +
+                    `?frame=${frameName}`;
+                window.history.pushState({ path: newUrl }, "", newUrl);
+            }
+
             async function drawFrame() {
                 const frameName = frames[currentIndex];
+
+                // Update the URL every time the frame changes
+                updateURL(frameName);
+
                 const imgPath = `chestcam_frames/${frameName}.jpg`;
                 const txtPath = `chestcam_frames/${frameName}.txt`;
 
                 document.getElementById("file-info").innerText =
-                    `Viewing: ${frameName}.jpg`;
+                    `Viewing: ${frameName}.jpg (${currentIndex + 1}/${frames.length})`;
 
                 const img = new Image();
                 img.src = imgPath;
@@ -531,32 +559,22 @@
                         const lines = text.trim().split("\n");
 
                         lines.forEach((line) => {
-                            const [cls, cx, cy, w, h] = line
-                                .split(" ")
-                                .map(Number);
+                            const parts = line.split(" ").map(Number);
+                            if (parts.length < 5) return;
+                            const [cls, cx, cy, w, h] = parts;
 
-                            // Convert YOLO (center) to Canvas (top-left)
                             const x = (cx - w / 2) * canvas.width;
                             const y = (cy - h / 2) * canvas.height;
                             const rectW = w * canvas.width;
                             const rectH = h * canvas.height;
 
                             ctx.strokeStyle = colors[cls] || "white";
-                            ctx.fillText(labels[cls] || "UNKNOWN", x, y - 10);
                             ctx.lineWidth = 5;
                             ctx.strokeRect(x, y, rectW, rectH);
 
-                            // Small label
                             ctx.fillStyle = colors[cls] || "white";
-                            ctx.fillText(
-                                cls === 0
-                                    ? "ME"
-                                    : cls === 1
-                                      ? "MAYBE"
-                                      : "OTHER",
-                                x,
-                                y - 10,
-                            );
+                            ctx.font = "20px sans-serif";
+                            ctx.fillText(labels[cls] || "UNKNOWN", x, y - 10);
                         });
                     } catch (e) {
                         console.log("No annotation yet for this frame.");
@@ -565,14 +583,27 @@
             }
 
             function next() {
-                currentIndex++;
-                drawFrame();
-            }
-            function prev() {
-                if (currentIndex > 0) currentIndex--;
-                drawFrame();
+                if (currentIndex < frames.length - 1) {
+                    currentIndex++;
+                    drawFrame();
+                }
             }
 
+            function prev() {
+                if (currentIndex > 0) {
+                    currentIndex--;
+                    drawFrame();
+                }
+            }
+
+            // Handle browser "Back" and "Forward" buttons
+            window.onpopstate = function () {
+                initFromURL();
+                drawFrame();
+            };
+
+            // Start the app
+            initFromURL();
             drawFrame();
         </script>
     </body>

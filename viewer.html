@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+    <head>
+        <title>ChestCam Box Reviewer</title>
+        <style>
+            body {
+                font-family: sans-serif;
+                background: #1a1a1a;
+                color: white;
+                text-align: center;
+            }
+            canvas {
+                border: 2px solid #444;
+                max-width: 90vw;
+                margin-top: 20px;
+            }
+            .controls {
+                margin: 20px;
+            }
+            button {
+                padding: 10px 20px;
+                font-size: 16px;
+                cursor: pointer;
+            }
+            .info {
+                color: #aaa;
+                margin-bottom: 10px;
+            }
+        </style>
+    </head>
+    <body>
+        <h2>ChestCam Annotation Review</h2>
+        <div class="info" id="file-info">Loading...</div>
+
+        <canvas id="canvas"></canvas>
+
+        <div class="controls">
+            <button onclick="prev()">⬅️ Previous</button>
+            <button onclick="next()">Next ➡️</button>
+        </div>
+
+        <script>
+            // We'll manually list a few frame numbers to test
+            let frames = [];
+            // Generates the list of filenames based on your folder structure
+            for (let i = 0; i < 600000; i += 50) {
+                frames.push("frame_" + i.toString().padStart(6, "0"));
+            }
+
+            let currentIndex = 0;
+            const canvas = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+            const colors = ["#3498db", "#e67e22", "#ffff00", "#ff0000"]; // Blue (L), Orange (R), Yellow, Red
+            const labels = ["MY LEFT", "MY RIGHT", "MAYBE", "OTHER"];
+
+            async function drawFrame() {
+                const frameName = frames[currentIndex];
+                const imgPath = `chestcam_frames/${frameName}.jpg`;
+                const txtPath = `chestcam_frames/${frameName}.txt`;
+
+                document.getElementById("file-info").innerText =
+                    `Viewing: ${frameName}.jpg`;
+
+                const img = new Image();
+                img.src = imgPath;
+                img.onload = async () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+
+                    try {
+                        const resp = await fetch(txtPath);
+                        if (!resp.ok) return;
+                        const text = await resp.text();
+                        const lines = text.trim().split("\n");
+
+                        lines.forEach((line) => {
+                            const [cls, cx, cy, w, h] = line
+                                .split(" ")
+                                .map(Number);
+
+                            // Convert YOLO (center) to Canvas (top-left)
+                            const x = (cx - w / 2) * canvas.width;
+                            const y = (cy - h / 2) * canvas.height;
+                            const rectW = w * canvas.width;
+                            const rectH = h * canvas.height;
+
+                            ctx.strokeStyle = colors[cls] || "white";
+                            ctx.fillText(labels[cls] || "UNKNOWN", x, y - 10);
+                            ctx.lineWidth = 5;
+                            ctx.strokeRect(x, y, rectW, rectH);
+
+                            // Small label
+                            ctx.fillStyle = colors[cls] || "white";
+                            ctx.fillText(
+                                cls === 0
+                                    ? "ME"
+                                    : cls === 1
+                                      ? "MAYBE"
+                                      : "OTHER",
+                                x,
+                                y - 10,
+                            );
+                        });
+                    } catch (e) {
+                        console.log("No annotation yet for this frame.");
+                    }
+                };
+            }
+
+            function next() {
+                currentIndex++;
+                drawFrame();
+            }
+            function prev() {
+                if (currentIndex > 0) currentIndex--;
+                drawFrame();
+            }
+
+            drawFrame();
+        </script>
+    </body>
+</html>
